@@ -1,3 +1,26 @@
+/* Here's everything you need — the full SFMC version with all three layers.Ran a command, read a fileRan a command, read a fileDownload that file. Now here's your complete deployment guide for when you get SFMC access.
+
+Step 1 — Create the Data Extension first (do this before anything else)
+In SFMC go to Email Studio → Data Extensions → Create. Name it exactly CampaignCraft_Submissions. Add these fields using the schema table that's built into the tool itself — you'll see it on the right panel when you open the file. Set SubmissionID as the primary key.
+
+Step 2 — Create the Triggered Send (for the preview email feature)
+Go to Email Studio → Interactions → Triggered Sends → Create. You need to:
+
+Create a new email in Content Builder first — name it CampaignCraft Preview Email. In the body use these AMPscript substitution strings: %%Headline%%, %%BodyText%%, %%CTALabel%%, %%CTALink%%, %%BrandColor%%, %%ImageURL%%
+Back in Triggered Sends, attach that email, set the external key to exactly CampaignCraft_Preview, and set status to Active
+
+
+Step 3 — Deploy the CloudPage
+Go to Web Studio → CloudPages → Create Collection → Create Page. In the code editor, paste the entire contents of the file you just downloaded. The AMPscript block is at the very top — SFMC processes it server-side before the HTML loads. Publish the page.
+
+Step 4 — Test it
+Open the published CloudPage URL. Fill in the form, click Save campaign to Data Extension. Go back to your DE and check the row appeared. Then test the preview send with your own email address.
+
+How the three layers work together
+The file you downloaded does all of this in one page. When the form is submitted, AMPscript at the top runs first (server-side), saves the row to the DE using InsertDE(), and optionally fires the Triggered Send using InvokeCreate(). The success/error message then renders based on whether @deResult came back positive. The JavaScript handles only the live preview and copy/download — it never touches the SFMC backend.
+*/
+
+
 %%[
 
 /* ============================================
