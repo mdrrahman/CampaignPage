@@ -1,0 +1,425 @@
+%%[
+
+/* ============================================
+   CAMPAIGNCRAFT AI — SFMC CLOUDPAGE VERSION
+   Layer 1: AMPscript handles form submission,
+   saves to Data Extension, triggers send.
+   ============================================ */
+
+/* Read form values on POST */
+SET @submitted    = RequestParameter("submitted")
+SET @campaignName = RequestParameter("campaignName")
+SET @headline     = RequestParameter("headline")
+SET @bodyText     = RequestParameter("bodyText")
+SET @imageURL     = RequestParameter("imageURL")
+SET @ctaLabel     = RequestParameter("ctaLabel")
+SET @ctaLink      = RequestParameter("ctaLink")
+SET @brandColor   = RequestParameter("brandColor")
+SET @language     = RequestParameter("language")
+SET @previewEmail = RequestParameter("previewEmail")
+SET @sendPreview  = RequestParameter("sendPreview")
+
+/* Only process on form POST */
+IF @submitted == "1" THEN
+
+  /* -------------------------------------------
+     STEP 1: Save to Data Extension
+     DE Name: CampaignCraft_Submissions
+     (create this DE first — see README below)
+     ------------------------------------------- */
+  SET @submissionID = GUID()
+  SET @submittedAt  = NOW()
+
+  SET @deResult = InsertDE(
+    "CampaignCraft_Submissions",
+    "SubmissionID",  @submissionID,
+    "CampaignName",  @campaignName,
+    "Headline",      @headline,
+    "BodyText",      @bodyText,
+    "ImageURL",      @imageURL,
+    "CTALabel",      @ctaLabel,
+    "CTALink",       @ctaLink,
+    "BrandColor",    @brandColor,
+    "Language",      @language,
+    "SubmittedAt",   @submittedAt,
+    "Status",        "Draft"
+  )
+
+  /* -------------------------------------------
+     STEP 2: If user clicked "Send Preview",
+     fire a Triggered Send to their email.
+     Triggered Send External Key: CampaignCraft_Preview
+     (create this in Email Studio first)
+     ------------------------------------------- */
+  IF @sendPreview == "1" AND NOT EMPTY(@previewEmail) THEN
+    SET @ts = CreateObject("TriggeredSend")
+    SetObjectProperty(@ts, "CustomerKey", "CampaignCraft_Preview")
+
+    SET @sub = CreateObject("Subscriber")
+    SetObjectProperty(@sub, "EmailAddress", @previewEmail)
+    SetObjectProperty(@sub, "SubscriberKey", @previewEmail)
+
+    /* Pass campaign content as attributes */
+    SET @attr1 = CreateObject("Attribute")
+    SetObjectProperty(@attr1, "Name", "Headline")
+    SetObjectProperty(@attr1, "Value", @headline)
+    AddObjectArrayItem(@sub, "Attributes", @attr1)
+
+    SET @attr2 = CreateObject("Attribute")
+    SetObjectProperty(@attr2, "Name", "BodyText")
+    SetObjectProperty(@attr2, "Value", @bodyText)
+    AddObjectArrayItem(@sub, "Attributes", @attr2)
+
+    SET @attr3 = CreateObject("Attribute")
+    SetObjectProperty(@attr3, "Name", "CTALabel")
+    SetObjectProperty(@attr3, "Value", @ctaLabel)
+    AddObjectArrayItem(@sub, "Attributes", @attr3)
+
+    SET @attr4 = CreateObject("Attribute")
+    SetObjectProperty(@attr4, "Name", "CTALink")
+    SetObjectProperty(@attr4, "Value", @ctaLink)
+    AddObjectArrayItem(@sub, "Attributes", @attr4)
+
+    SET @attr5 = CreateObject("Attribute")
+    SetObjectProperty(@attr5, "Name", "BrandColor")
+    SetObjectProperty(@attr5, "Value", @brandColor)
+    AddObjectArrayItem(@sub, "Attributes", @attr5)
+
+    SET @attr6 = CreateObject("Attribute")
+    SetObjectProperty(@attr6, "Name", "ImageURL")
+    SetObjectProperty(@attr6, "Value", @imageURL)
+    AddObjectArrayItem(@sub, "Attributes", @attr6)
+
+    AddObjectArrayItem(@ts, "Subscribers", @sub)
+
+    SET @tsResult = InvokeCreate(@ts, @tsStatus, @tsError)
+  ENDIF
+
+ENDIF
+
+]%%
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CampaignCraft AI — SFMC</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; background: #f5f5f5; color: #1a1a1a; }
+
+  header { background: #fff; border-bottom: 1px solid #e5e5e5; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+  header h1 { font-size: 16px; font-weight: 600; }
+  .badge { font-size: 11px; background: #e8f5e9; color: #2e7d32; padding: 3px 10px; border-radius: 20px; border: 1px solid #c8e6c9; }
+
+  .app { display: grid; grid-template-columns: 400px 1fr; min-height: calc(100vh - 53px); }
+  .left { background: #fff; border-right: 1px solid #e5e5e5; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+  .right { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+
+  .section-title { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.05em; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 12px; font-weight: 500; color: #555; }
+  .field input, .field textarea, .field select { font-size: 13px; color: #1a1a1a; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 7px; padding: 8px 11px; width: 100%; resize: none; font-family: Arial, sans-serif; transition: border-color 0.15s; }
+  .field input:focus, .field textarea:focus, .field select:focus { outline: none; border-color: #7F77DD; }
+  .field textarea { min-height: 80px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .btn { font-size: 13px; padding: 10px 20px; border-radius: 7px; border: 1px solid #e0e0e0; background: transparent; color: #1a1a1a; cursor: pointer; font-weight: 500; transition: all 0.15s; width: 100%; }
+  .btn:hover { background: #f5f5f5; }
+  .btn.primary { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .btn.primary:hover { background: #333; }
+  .btn.purple { background: #7F77DD; color: #fff; border-color: #7F77DD; }
+  .btn.purple:hover { background: #6c65c4; }
+
+  .preview-wrap { background: #fff; border: 1px solid #e5e5e5; border-radius: 10px; overflow: hidden; flex: 1; }
+  .preview-toolbar { padding: 10px 16px; border-bottom: 1px solid #eee; display: flex; gap: 8px; align-items: center; }
+  .preview-toolbar span { font-size: 12px; color: #888; }
+  .tab { font-size: 12px; padding: 5px 14px; border-radius: 6px; border: 1px solid #e0e0e0; background: transparent; color: #555; cursor: pointer; }
+  .tab.active { background: #1a1a1a; color: #fff; border-color: #1a1a1a; }
+  .preview-inner { padding: 16px; background: #f0f0f0; min-height: 400px; display: flex; justify-content: center; }
+  iframe#preview { border: none; border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.10); background: #fff; width: 100%; min-height: 400px; transition: width 0.2s; }
+
+  .preview-actions { padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; }
+  .preview-actions button { flex: 1; font-size: 12px; padding: 8px; border-radius: 7px; border: 1px solid #e0e0e0; background: transparent; cursor: pointer; }
+  .preview-actions button:hover { background: #f5f5f5; }
+
+  .alert { padding: 12px 16px; border-radius: 8px; font-size: 13px; line-height: 1.6; }
+  .alert.success { background: #e8f5e9; border: 1px solid #c8e6c9; color: #2e7d32; }
+  .alert.error { background: #ffebee; border: 1px solid #ffcdd2; color: #c62828; }
+  .alert.info { background: #e8eafd; border: 1px solid #c5c0f5; color: #3c3489; }
+
+  .de-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+  .de-table th { background: #f5f5f5; padding: 7px 10px; text-align: left; font-weight: 600; color: #555; border: 1px solid #eee; }
+  .de-table td { padding: 7px 10px; border: 1px solid #eee; color: #333; font-family: monospace; font-size: 11px; }
+
+  .color-row { display: flex; gap: 8px; align-items: center; }
+  .color-row input[type=color] { width: 36px; height: 34px; border: 1px solid #e0e0e0; border-radius: 6px; padding: 2px; cursor: pointer; }
+  .color-row input[type=text] { flex: 1; }
+
+  .divider { border: none; border-top: 1px solid #eee; }
+
+  .send-box { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+  .send-box .label { font-size: 12px; font-weight: 600; color: #555; }
+
+  .copy-ok { font-size: 12px; color: #2e7d32; display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>CampaignCraft AI &mdash; SFMC Edition</h1>
+  <span class="badge">CloudPage + AMPscript + Data Extension</span>
+</header>
+
+%%[ IF @submitted == "1" THEN ]%%
+
+  %%[ IF @deResult >= 1 THEN ]%%
+  <div style="max-width:700px;margin:24px auto;">
+    <div class="alert success">
+      <strong>Campaign saved.</strong> Submission ID: <code>%%=v(@submissionID)=%%</code><br>
+      Saved to <strong>CampaignCraft_Submissions</strong> Data Extension at %%=v(@submittedAt)=%%.
+      %%[ IF @sendPreview == "1" THEN ]%%
+        <br>Preview email sent to <strong>%%=v(@previewEmail)=%%</strong>.
+      %%[ ENDIF ]%%
+    </div>
+    <div style="margin-top:12px;">
+      <a href="%%=RequestParameter('PAGEURL')=%%" style="font-size:13px;color:#7F77DD;">&#8592; Build another campaign</a>
+    </div>
+  </div>
+  %%[ ELSE ]%%
+  <div style="max-width:700px;margin:24px auto;">
+    <div class="alert error">
+      <strong>Save failed.</strong> Check that the Data Extension <code>CampaignCraft_Submissions</code> exists and this CloudPage has write permissions.
+    </div>
+  </div>
+  %%[ ENDIF ]%%
+
+%%[ ELSE ]%%
+
+<div class="app">
+
+  <!-- LEFT: Form -->
+  <div class="left">
+    <div class="section-title">Campaign content</div>
+
+    <div class="row">
+      <div class="field">
+        <label>Campaign name</label>
+        <input name="campaignName" id="f-name" type="text" placeholder="Summer Sale 2026" oninput="updatePreview()">
+      </div>
+      <div class="field">
+        <label>Language</label>
+        <select name="language" id="f-lang" onchange="updatePreview()">
+          <option>English</option>
+          <option>Arabic</option>
+          <option>French</option>
+          <option>Spanish</option>
+          <option>German</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Headline</label>
+      <input name="headline" id="f-title" type="text" placeholder="Discover your next adventure" oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+      <label>Body text</label>
+      <textarea name="bodyText" id="f-body" placeholder="Write your main message here..." oninput="updatePreview()"></textarea>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label>CTA label</label>
+        <input name="ctaLabel" id="f-cta" type="text" placeholder="Book now" oninput="updatePreview()">
+      </div>
+      <div class="field">
+        <label>CTA link</label>
+        <input name="ctaLink" id="f-link" type="text" placeholder="https://" oninput="updatePreview()">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Hero image URL</label>
+      <input name="imageURL" id="f-image" type="text" placeholder="https://your-cdn.com/image.jpg" oninput="updatePreview()">
+    </div>
+
+    <div class="field">
+      <label>Brand colour</label>
+      <div class="color-row">
+        <input type="color" id="f-colorpicker" value="#7F77DD" oninput="syncColor(this.value)">
+        <input type="text" name="brandColor" id="f-color" value="#7F77DD" oninput="syncColorText(this.value)">
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Send preview section -->
+    <div class="send-box">
+      <div class="label">Send preview email</div>
+      <div class="field">
+        <label>Preview email address</label>
+        <input name="previewEmail" id="f-preview-email" type="email" placeholder="you@yourdomain.com">
+      </div>
+      <div class="alert info" style="font-size:12px;">
+        Sends a real email via Triggered Send <code>CampaignCraft_Preview</code>. Set that up in Email Studio first.
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Hidden fields -->
+    <input type="hidden" name="submitted" value="1">
+    <input type="hidden" id="f-send-preview" name="sendPreview" value="0">
+
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button type="button" class="btn primary" onclick="submitForm(0)">Save campaign to Data Extension</button>
+      <button type="button" class="btn purple" onclick="submitForm(1)">Save + send preview email</button>
+    </div>
+
+  </div>
+
+  <!-- RIGHT: Preview + actions -->
+  <div class="right">
+
+    <div class="preview-wrap">
+      <div class="preview-toolbar">
+        <span>Preview:</span>
+        <button class="tab active" onclick="setView('desktop',this)">Desktop</button>
+        <button class="tab" onclick="setView('mobile',this)">Mobile</button>
+      </div>
+      <div class="preview-inner" id="preview-inner">
+        <iframe id="preview" width="100%" height="500"></iframe>
+      </div>
+      <div class="preview-actions">
+        <button onclick="copyHTML()">Copy HTML</button>
+        <button onclick="downloadHTML()">Download .html</button>
+        <span id="copy-ok" class="copy-ok">&#10003; Copied!</span>
+      </div>
+    </div>
+
+    <!-- DE Schema reminder -->
+    <div style="background:#fff;border:1px solid #e5e5e5;border-radius:10px;padding:16px;">
+      <div class="section-title" style="margin-bottom:10px;">Data Extension schema</div>
+      <div style="font-size:12px;color:#888;margin-bottom:8px;">Create this DE in SFMC before deploying. Name: <code>CampaignCraft_Submissions</code></div>
+      <table class="de-table">
+        <tr><th>Field name</th><th>Type</th><th>Length</th><th>Primary key</th></tr>
+        <tr><td>SubmissionID</td><td>Text</td><td>50</td><td>Yes</td></tr>
+        <tr><td>CampaignName</td><td>Text</td><td>200</td><td>No</td></tr>
+        <tr><td>Headline</td><td>Text</td><td>500</td><td>No</td></tr>
+        <tr><td>BodyText</td><td>Text</td><td>2000</td><td>No</td></tr>
+        <tr><td>ImageURL</td><td>Text</td><td>500</td><td>No</td></tr>
+        <tr><td>CTALabel</td><td>Text</td><td>100</td><td>No</td></tr>
+        <tr><td>CTALink</td><td>Text</td><td>500</td><td>No</td></tr>
+        <tr><td>BrandColor</td><td>Text</td><td>10</td><td>No</td></tr>
+        <tr><td>Language</td><td>Text</td><td>50</td><td>No</td></tr>
+        <tr><td>SubmittedAt</td><td>Date</td><td>—</td><td>No</td></tr>
+        <tr><td>Status</td><td>Text</td><td>50</td><td>No</td></tr>
+      </table>
+    </div>
+
+  </div>
+</div>
+
+<form id="main-form" method="POST" action="" style="display:none;"></form>
+
+%%[ ENDIF ]%%
+
+<script>
+var currentView = 'desktop';
+
+function getEmailHTML() {
+  var title = document.getElementById('f-title').value || 'Your headline here';
+  var body = document.getElementById('f-body').value || 'Your email body goes here.';
+  var image = document.getElementById('f-image').value;
+  var cta = document.getElementById('f-cta').value || 'Click here';
+  var link = document.getElementById('f-link').value || '#';
+  var color = document.getElementById('f-color').value || '#7F77DD';
+  var lang = document.getElementById('f-lang').value;
+  var dir = lang === 'Arabic' ? 'rtl' : 'ltr';
+  var imgBlock = image ? '<img src="' + image + '" alt="" style="width:100%;display:block;border-radius:6px;margin-bottom:24px">' : '';
+
+  return '<!DOCTYPE html><html lang="en" dir="' + dir + '"><head><meta charset="UTF-8"><style>' +
+    'body{margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif}' +
+    '.wrap{max-width:600px;margin:24px auto;background:#fff;border-radius:10px;overflow:hidden;border:1px solid #e8e8e8}' +
+    '.header{background:' + color + ';padding:28px 32px}' +
+    '.header h1{margin:0;color:#fff;font-size:26px;font-weight:700;line-height:1.3}' +
+    '.body{padding:28px 32px}' +
+    '.body p{color:#444;font-size:15px;line-height:1.75;margin:0 0 24px}' +
+    '.cta{display:inline-block;background:' + color + ';color:#fff;padding:13px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px}' +
+    '.footer{background:#f9f9f9;padding:16px 32px;border-top:1px solid #eee;text-align:center;font-size:12px;color:#aaa}' +
+    '</style></head><body>' +
+    '<div class="wrap">' +
+    '<div class="header"><h1>' + title + '</h1></div>' +
+    '<div class="body">' + imgBlock + '<p>' + body + '</p><a href="' + link + '" class="cta">' + cta + '</a></div>' +
+    '<div class="footer">You received this email because you subscribed. <a href="#" style="color:#aaa">Unsubscribe</a></div>' +
+    '</div></body></html>';
+}
+
+function updatePreview() {
+  var frame = document.getElementById('preview');
+  var doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open(); doc.write(getEmailHTML()); doc.close();
+  if (currentView === 'mobile') {
+    frame.style.width = '375px';
+  } else {
+    frame.style.width = '100%';
+  }
+}
+
+function setView(mode, btn) {
+  currentView = mode;
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
+  btn.classList.add('active');
+  updatePreview();
+}
+
+function syncColor(val) {
+  document.getElementById('f-color').value = val;
+  updatePreview();
+}
+function syncColorText(val) {
+  if (/^#[0-9A-Fa-f]{6}$/.test(val)) {
+    document.getElementById('f-colorpicker').value = val;
+  }
+  updatePreview();
+}
+
+function submitForm(sendPreview) {
+  document.getElementById('f-send-preview').value = sendPreview;
+  var form = document.getElementById('main-form');
+  var inputs = document.querySelectorAll('.left input, .left textarea, .left select');
+  inputs.forEach(function(el) {
+    if (el.name && el.id !== 'f-colorpicker') {
+      var clone = el.cloneNode(true);
+      form.appendChild(clone);
+    }
+  });
+  var sp = document.createElement('input');
+  sp.type = 'hidden'; sp.name = 'sendPreview'; sp.value = sendPreview;
+  form.appendChild(sp);
+  form.submit();
+}
+
+function copyHTML() {
+  navigator.clipboard.writeText(getEmailHTML()).then(function() {
+    var el = document.getElementById('copy-ok');
+    el.style.display = 'inline';
+    setTimeout(function() { el.style.display = 'none'; }, 2500);
+  });
+}
+
+function downloadHTML() {
+  var name = document.getElementById('f-name').value || 'campaign';
+  var blob = new Blob([getEmailHTML()], { type: 'text/html' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = name.replace(/\s+/g, '-').toLowerCase() + '-sfmc.html';
+  a.click();
+}
+
+updatePreview();
+</script>
+</body>
+</html>
